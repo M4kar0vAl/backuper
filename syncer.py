@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import shutil
 from pathlib import Path
@@ -26,28 +27,29 @@ class Syncer:
         self.dest.mkdir(parents=True, exist_ok=True)
         self._ensure_path_is_a_dir(self.dest)
 
-    def sync(self):
+    async def sync(self):
         src_files = self._get_files_in_dir(self.src)
 
-        for file in src_files:
-            target_path = self.dest / file.name
+        async with asyncio.TaskGroup() as tg:
+            for file in src_files:
+                target_path = self.dest / file.name
 
-            if not target_path.exists():
-                self._copy_file_to_dest(file)
-                log.info(f"Copied {file} to {self.dest}")
-                continue
+                if not target_path.exists():
+                    tg.create_task(asyncio.to_thread(self._copy_file_to_dest, file))
+                    log.info(f"Copied {file} to {self.dest}")
+                    continue
 
-            dest_mtime = self._get_mtime(target_path)
-            src_mtime = self._get_mtime(file)
+                dest_mtime = self._get_mtime(target_path)
+                src_mtime = self._get_mtime(file)
 
-            if src_mtime > dest_mtime:
-                self._copy_file_to_dest(file)
-                log.info(f"Copied {file} to {self.dest}")
-            elif src_mtime < dest_mtime:
-                log.warning(f"Skipped {file}. Destination is newer.")
-                continue
-            else:
-                log.info(f"Skipped {file}. Already up to date")
+                if src_mtime > dest_mtime:
+                    tg.create_task(asyncio.to_thread(self._copy_file_to_dest, file))
+                    log.info(f"Copied {file} to {self.dest}")
+                elif src_mtime < dest_mtime:
+                    log.warning(f"Skipped {file}. Destination is newer.")
+                    continue
+                else:
+                    log.info(f"Skipped {file}. Already up to date")
 
     def _copy_file_to_dest(self, file: Path) -> None:
         shutil.copy2(file, self.dest)
@@ -87,7 +89,7 @@ def sync(
         ),
     ],
 ):
-    Syncer(src, dest).sync()
+    asyncio.run(Syncer(src, dest).sync())
 
 
 if __name__ == "__main__":
