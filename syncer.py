@@ -14,7 +14,7 @@ logging.basicConfig(
 )
 
 
-class Syncer:
+class Backuper:
     def __init__(self, src: Path, dest: Path):
         self.src = src
         self.dest = dest
@@ -27,7 +27,7 @@ class Syncer:
         self.dest.mkdir(parents=True, exist_ok=True)
         self._ensure_path_is_a_dir(self.dest)
 
-    async def sync(self):
+    async def backup(self):
         src_files = self._get_files_in_dir(self.src)
 
         async with asyncio.TaskGroup() as tg:
@@ -89,7 +89,7 @@ def sync(
         ),
     ],
 ):
-    asyncio.run(Syncer(src, dest).sync())
+    asyncio.run(Backuper(src, dest).backup())
 
 
 if __name__ == "__main__":
