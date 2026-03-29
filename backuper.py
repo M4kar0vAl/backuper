@@ -68,7 +68,7 @@ class Backuper:
             raise NotADirectoryError(path)
 
 
-def sync(
+def backup(
     src: Annotated[
         Path,
         typer.Argument(
@@ -93,4 +93,4 @@ def sync(
 
 
 if __name__ == "__main__":
-    typer.run(sync)
+    typer.run(backup)
