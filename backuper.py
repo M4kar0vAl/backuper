@@ -1,17 +1,21 @@
 import asyncio
 import logging
 import shutil
+from datetime import datetime
 from pathlib import Path
 from typing import Annotated
 
 import typer
-
+from rich.console import Console
+from rich.table import Table
 
 log = logging.getLogger(__name__)
 logging.basicConfig(
     level=logging.INFO,
     format="[%(levelname)s] %(message)s",
 )
+
+console = Console()
 
 
 class Backuper:
@@ -92,8 +96,33 @@ def backup(
             help="Destination directory",
         ),
     ],
+    print_dest_files: Annotated[
+        bool,
+        typer.Option(
+            "--print-dest-files",
+            "-p",
+            help="Whether to print files in destination after performing backup",
+        ),
+    ] = False,
 ):
-    asyncio.run(Backuper(src, dest).backup())
+    backuper = Backuper(src, dest)
+    asyncio.run(backuper.backup())
+
+    if print_dest_files:
+        table = Table(
+            title=f"Файлы в {backuper.dest}:",
+            show_header=True,
+            header_style="bold cyan",
+        )
+        table.add_column("Имя файла", style="dim", width=25)
+        table.add_column("Дата изменения", justify="right", style="green")
+
+        for file, mtime in backuper.get_dest_files_with_mtime():
+            dt = datetime.fromtimestamp(mtime)
+            date_str = dt.strftime("%d.%m.%Y %H:%M")
+            table.add_row(file.name, date_str)
+
+        console.print(table)
 
 
 if __name__ == "__main__":
