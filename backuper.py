@@ -51,6 +51,10 @@ class Backuper:
                 else:
                     log.info(f"Skipped {file}. Already up to date")
 
+    def get_dest_files_with_mtime(self) -> list[tuple[Path, float]]:
+        dest_files = self._get_files_in_dir(self.dest)
+        return [(file, file.stat().st_mtime) for file in dest_files]
+
     def _copy_file_to_dest(self, file: Path) -> None:
         shutil.copy2(file, self.dest)
 
