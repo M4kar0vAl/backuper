@@ -30,24 +30,30 @@ class Backuper:
 
         self.dest.mkdir(parents=True, exist_ok=True)
         self._ensure_path_is_a_dir(self.dest)
+        self._last_copied = None
 
     async def backup(self):
         src_files = self._get_files_in_dir(self.src)
+        last_copied: list[tuple[Path, float]] = []
 
         async with asyncio.TaskGroup() as tg:
             for file in src_files:
                 target_path = self.dest / file.name
+                file_mtime_seconds = self._get_mtime_seconds(file)
+                copied_file_info = (target_path, file_mtime_seconds)
 
                 if not target_path.exists():
                     tg.create_task(asyncio.to_thread(self._copy_file_to_dest, file))
+                    last_copied.append(copied_file_info)
                     log.info(f"Copied {file} to {self.dest}")
                     continue
 
-                dest_mtime = self._get_mtime(target_path)
                 src_mtime = self._get_mtime(file)
+                dest_mtime = self._get_mtime(target_path)
 
                 if src_mtime > dest_mtime:
                     tg.create_task(asyncio.to_thread(self._copy_file_to_dest, file))
+                    last_copied.append(copied_file_info)
                     log.info(f"Copied {file} to {self.dest}")
                 elif src_mtime < dest_mtime:
                     log.warning(f"Skipped {file}. Destination is newer.")
@@ -55,9 +61,16 @@ class Backuper:
                 else:
                     log.info(f"Skipped {file}. Already up to date")
 
-    def get_dest_files_with_mtime(self) -> list[tuple[Path, float]]:
-        dest_files = self._get_files_in_dir(self.dest)
-        return [(file, file.stat().st_mtime) for file in dest_files]
+        self._last_copied = last_copied
+
+    @property
+    def last_copied(self) -> list[tuple[Path, float]]:
+        if self._last_copied is None:
+            raise RuntimeError(
+                "You should call 'backup' before accessing 'last_copied'"
+            )
+
+        return self._last_copied
 
     def _copy_file_to_dest(self, file: Path) -> None:
         shutil.copy2(file, self.dest)
@@ -65,6 +78,10 @@ class Backuper:
     def _get_files_in_dir(self, dir_path: Path) -> list[Path]:
         self._ensure_path_is_a_dir(dir_path)
         return [p for p in dir_path.iterdir() if p.is_file()]
+
+    @classmethod
+    def _get_mtime_seconds(cls, path: Path) -> float:
+        return path.stat().st_mtime
 
     @classmethod
     def _get_mtime(cls, path: Path) -> int:
@@ -96,28 +113,28 @@ def backup(
             help="Destination directory",
         ),
     ],
-    print_dest_files: Annotated[
+    show_copied: Annotated[
         bool,
         typer.Option(
-            "--print-dest-files",
-            "-p",
-            help="Whether to print files in destination after performing backup",
+            "--show-copied",
+            "-s",
+            help="Whether to print copied files after performing backup",
         ),
     ] = False,
 ):
     backuper = Backuper(src, dest)
     asyncio.run(backuper.backup())
 
-    if print_dest_files:
+    if show_copied:
         table = Table(
-            title=f"Файлы в {backuper.dest}:",
+            title="Скопированные файлы:",
             show_header=True,
             header_style="bold cyan",
         )
         table.add_column("Имя файла", style="dim", width=25)
         table.add_column("Дата изменения", justify="right", style="green")
 
-        for file, mtime in backuper.get_dest_files_with_mtime():
+        for file, mtime in backuper.last_copied:
             dt = datetime.fromtimestamp(mtime)
             date_str = dt.strftime("%d.%m.%Y %H:%M")
             table.add_row(file.name, date_str)
