@@ -35,24 +35,21 @@ class Backuper:
     async def backup(self):
         src_files = self._get_files_in_dir(self.src)
         last_copied: list[tuple[Path, float]] = []
+        lock = asyncio.Lock()
 
         async with asyncio.TaskGroup() as tg:
             for file in src_files:
                 target_path = self.dest / file.name
-                file_mtime_seconds = self._get_mtime_seconds(file)
-                copied_file_info = (target_path, file_mtime_seconds)
 
                 if not target_path.exists():
-                    tg.create_task(self._copy_file_to_dest(file))
-                    last_copied.append(copied_file_info)
+                    tg.create_task(self.backup_file(file, last_copied, lock))
                     continue
 
                 src_mtime = self._get_mtime(file)
                 dest_mtime = self._get_mtime(target_path)
 
                 if src_mtime > dest_mtime:
-                    tg.create_task(self._copy_file_to_dest(file))
-                    last_copied.append(copied_file_info)
+                    tg.create_task(self.backup_file(file, last_copied, lock))
                 elif src_mtime < dest_mtime:
                     log.warning(f"Skipped {file.name}. Destination is newer.")
                     continue
@@ -60,6 +57,17 @@ class Backuper:
                     log.info(f"Skipped {file.name}. Already up to date")
 
         self._last_copied = last_copied
+
+    async def backup_file(
+        self, file: Path, records: list[tuple[Path, float]], lock: asyncio.Lock
+    ) -> Path | None:
+        dest_path = await self._copy_file_to_dest(file)
+
+        if dest_path is not None:
+            async with lock:
+                records.append(self._get_record_for_copied_file(dest_path))
+
+        return dest_path
 
     @property
     def last_copied(self) -> list[tuple[Path, float]]:
@@ -70,17 +78,23 @@ class Backuper:
 
         return self._last_copied
 
-    async def _copy_file_to_dest(self, file: Path) -> None:
+    async def _copy_file_to_dest(self, file: Path) -> Path | None:
         try:
-            await asyncio.to_thread(shutil.copy2, file, self.dest)
+            dest_path = await asyncio.to_thread(shutil.copy2, file, self.dest)
         except Exception as e:
             log.error(f"Failed to copy file {file.name}: {e}")
+            return None
         else:
             log.info(f"Copied {file.name} to {self.dest}")
+
+        return dest_path
 
     def _get_files_in_dir(self, dir_path: Path) -> list[Path]:
         self._ensure_path_is_a_dir(dir_path)
         return [p for p in dir_path.iterdir() if p.is_file()]
+
+    def _get_record_for_copied_file(self, copied_file: Path) -> tuple[Path, float]:
+        return copied_file, self._get_mtime_seconds(copied_file)
 
     @classmethod
     def _get_mtime_seconds(cls, path: Path) -> float:
