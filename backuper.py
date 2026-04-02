@@ -19,9 +19,13 @@ console = Console()
 
 
 class Backuper:
-    def __init__(self, src: Path, dest: Path):
+    def __init__(self, src: Path, dest: Path, max_concurrent: int = 10):
         self.src = src
         self.dest = dest
+        self._max_concurrent = max_concurrent
+
+        if self._max_concurrent <= 0:
+            raise ValueError("max_concurrent must be a positive integer")
 
         if not self.src.exists():
             raise FileNotFoundError(f"Source {self.src} does not exist")
@@ -36,20 +40,21 @@ class Backuper:
         src_files = self._get_files_in_dir(self.src)
         last_copied: list[tuple[Path, float]] = []
         lock = asyncio.Lock()
+        semaphore = asyncio.BoundedSemaphore(self._max_concurrent)
 
         async with asyncio.TaskGroup() as tg:
             for file in src_files:
                 target_path = self.dest / file.name
 
                 if not target_path.exists():
-                    tg.create_task(self.backup_file(file, last_copied, lock))
+                    tg.create_task(self.backup_file(file, last_copied, lock, semaphore))
                     continue
 
                 src_mtime = self._get_mtime(file)
                 dest_mtime = self._get_mtime(target_path)
 
                 if src_mtime > dest_mtime:
-                    tg.create_task(self.backup_file(file, last_copied, lock))
+                    tg.create_task(self.backup_file(file, last_copied, lock, semaphore))
                 elif src_mtime < dest_mtime:
                     log.warning(f"Skipped {file.name}. Destination is newer.")
                     continue
@@ -59,9 +64,14 @@ class Backuper:
         self._last_copied = last_copied
 
     async def backup_file(
-        self, file: Path, records: list[tuple[Path, float]], lock: asyncio.Lock
+        self,
+        file: Path,
+        records: list[tuple[Path, float]],
+        lock: asyncio.Lock,
+        semaphore: asyncio.Semaphore | asyncio.BoundedSemaphore,
     ) -> Path | None:
-        dest_path = await self._copy_file_to_dest(file)
+        async with semaphore:
+            dest_path = await self._copy_file_to_dest(file)
 
         if dest_path is not None:
             async with lock:
