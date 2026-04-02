@@ -43,7 +43,7 @@ class Backuper:
                 copied_file_info = (target_path, file_mtime_seconds)
 
                 if not target_path.exists():
-                    tg.create_task(asyncio.to_thread(self._copy_file_to_dest, file))
+                    tg.create_task(self._copy_file_to_dest(file))
                     last_copied.append(copied_file_info)
                     continue
 
@@ -51,7 +51,7 @@ class Backuper:
                 dest_mtime = self._get_mtime(target_path)
 
                 if src_mtime > dest_mtime:
-                    tg.create_task(asyncio.to_thread(self._copy_file_to_dest, file))
+                    tg.create_task(self._copy_file_to_dest(file))
                     last_copied.append(copied_file_info)
                 elif src_mtime < dest_mtime:
                     log.warning(f"Skipped {file.name}. Destination is newer.")
@@ -70,9 +70,9 @@ class Backuper:
 
         return self._last_copied
 
-    def _copy_file_to_dest(self, file: Path) -> None:
+    async def _copy_file_to_dest(self, file: Path) -> None:
         try:
-            shutil.copy2(file, self.dest)
+            await asyncio.to_thread(shutil.copy2, file, self.dest)
         except Exception as e:
             log.error(f"Failed to copy file {file.name}: {e}")
         else:
