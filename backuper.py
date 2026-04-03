@@ -86,7 +86,7 @@ class Backuper:
 
     async def _copy_file_to_dest(self, file: Path) -> Path | None:
         try:
-            dest_path = await asyncio.to_thread(shutil.copy2, file, self.dest)
+            dest_path = Path(await asyncio.to_thread(shutil.copy2, file, self.dest))
         except Exception as e:
             log.error(f"Failed to copy file {file.name}: {e}")
             return None
