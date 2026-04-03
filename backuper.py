@@ -35,25 +35,25 @@ class Backuper:
         self.dest.mkdir(parents=True, exist_ok=True)
         self._ensure_path_is_a_dir(self.dest)
         self._last_copied = None
+        self._semaphore = asyncio.BoundedSemaphore(self._max_concurrent)
 
     async def backup(self):
         src_files = self._get_files_in_dir(self.src)
         last_copied: list[tuple[Path, float]] = []
-        semaphore = asyncio.BoundedSemaphore(self._max_concurrent)
 
         async with asyncio.TaskGroup() as tg:
             for file in src_files:
                 target_path = self.dest / file.name
 
                 if not target_path.exists():
-                    tg.create_task(self.backup_file(file, last_copied, semaphore))
+                    tg.create_task(self.backup_file(file, last_copied))
                     continue
 
                 src_mtime = self._get_mtime(file)
                 dest_mtime = self._get_mtime(target_path)
 
                 if src_mtime > dest_mtime:
-                    tg.create_task(self.backup_file(file, last_copied, semaphore))
+                    tg.create_task(self.backup_file(file, last_copied))
                 elif src_mtime < dest_mtime:
                     log.warning(f"Skipped {file.name}. Destination is newer.")
                     continue
@@ -66,9 +66,8 @@ class Backuper:
         self,
         file: Path,
         records: list[tuple[Path, float]],
-        semaphore: asyncio.Semaphore | asyncio.BoundedSemaphore,
     ) -> Path | None:
-        async with semaphore:
+        async with self._semaphore:
             dest_path = await self._copy_file_to_dest(file)
 
         if dest_path is not None:
