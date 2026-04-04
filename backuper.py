@@ -61,9 +61,15 @@ class Backuper:
                 if src_mtime > dest_mtime:
                     tg.create_task(self.backup_file(file))
                 elif src_mtime < dest_mtime:
+                    console.print(
+                        f"[yellow]⤷[/yellow] Skipped {file.name}: destination is newer"
+                    )
                     log.warning("Skipped %s. Destination is newer.", file.name)
                     continue
                 else:
+                    console.print(
+                        f"[dim]⤷[/dim] Skipped {file.name}: already up to date"
+                    )
                     log.info("Skipped %s. Already up to date", file.name)
 
     async def backup_file(
@@ -91,9 +97,11 @@ class Backuper:
         try:
             dest_path = Path(await asyncio.to_thread(shutil.copy2, file, self.dest))
         except Exception as e:
+            console.print(f"[red]❌ Failed to copy {file.name}: {e}[/red]")
             log.error("Failed to copy file %s: %s", file.name, e)
             return None
         else:
+            console.print(f"[green]✅[/green] Copied {file.name}")
             log.info("Copied %s to %s", file.name, self.dest)
 
         return dest_path
