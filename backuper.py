@@ -2,6 +2,7 @@ import asyncio
 import logging
 import shutil
 from datetime import datetime
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Annotated
 
@@ -9,11 +10,16 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+
+log_file = Path("logs/backuper.log")
+log_file.parent.mkdir(parents=True, exist_ok=True)
+
+rotating = RotatingFileHandler(log_file, maxBytes=1 * 1024 * 1024, backupCount=2)
+rotating.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
+
+logging.basicConfig(level=logging.INFO, handlers=[rotating])
+
 log = logging.getLogger(__name__)
-logging.basicConfig(
-    level=logging.INFO,
-    format="[%(levelname)s] %(message)s",
-)
 
 console = Console()
 
