@@ -52,14 +52,14 @@ class Backuper:
                 target_path = self.dest / file.name
 
                 if not target_path.exists():
-                    tg.create_task(self.backup_file(file))
+                    tg.create_task(self._backup_file(file))
                     continue
 
                 src_mtime = self._get_mtime(file)
                 dest_mtime = self._get_mtime(target_path)
 
                 if src_mtime > dest_mtime:
-                    tg.create_task(self.backup_file(file))
+                    tg.create_task(self._backup_file(file))
                 elif src_mtime < dest_mtime:
                     console.print(
                         f"[yellow]⤷[/yellow] Skipped {file.name}: destination is newer"
@@ -72,7 +72,7 @@ class Backuper:
                     )
                     log.info("Skipped %s. Already up to date", file.name)
 
-    async def backup_file(
+    async def _backup_file(
         self,
         file: Path,
     ) -> Path | None:
