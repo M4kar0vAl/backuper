@@ -39,7 +39,6 @@ class Backuper:
         self._ensure_path_is_a_dir(self.src)
 
         self.dest.mkdir(parents=True, exist_ok=True)
-        self._ensure_path_is_a_dir(self.dest)
         self._last_copied: list[tuple[Path, float]] | None = None
         self._semaphore = asyncio.BoundedSemaphore(self._max_concurrent)
 
